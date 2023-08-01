@@ -1,7 +1,7 @@
-mod lib;
-use lib::{CodeWriter, CodeWriterClass, Parser, ParserClass};
+mod vm_translator;
 use std::fs::File;
 use std::io::BufReader;
+use vm_translator::{CodeWriter, CodeWriterClass, Command, ParserClass, ParserPublic};
 fn main() {
     let file = File::open("test.txt");
     let to_pass = BufReader::new(file.unwrap());
@@ -13,7 +13,14 @@ fn main() {
         if !break_or {
             break;
         }
-        write.write_arithmetic(&parser);
-        write.write_push_pop(&parser);
+        match parser.command_type {
+            Command::Arithmetic(_) => {
+                write.write_arithmetic(&parser);
+            }
+            Command::Function(_) => {
+                write.write_push_pop(&parser);
+            }
+            _ => continue,
+        }
     }
 }
