@@ -42,7 +42,20 @@ The ParserClass struct provides public attributes that can be accessed after par
 Please note that the ParserClass is designed to be used in the context of the provided Command and Segment enums from the modules module. Make sure to import the Command and Segment enums correctly to use them with the parser.
 
 For example:
-```ruby 
+```ruby
+use vm_translator::parser::{ParserPublic, ParserClass};
+use vm_translator::modules::{Command, Segment};
+use std::fs::File;
+use std::io::BufReader;
+
+fn main() {
+    // Open the input file and create a BufReader
+    let input_file = File::open("input.vm").expect("Failed to open input file");
+    let buf_reader = BufReader::new(input_file);
+
+    // Create an instance of the parser
+    let mut parser = ParserClass::new(buf_reader);
+
     // Check if there are more commands to be parsed
     while parser.has_more_commands() {
         // Parse the next command and access its attributes
