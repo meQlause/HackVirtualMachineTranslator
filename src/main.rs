@@ -1,13 +1,14 @@
 mod vm_translator;
 use std::fs::File;
 use std::io::BufReader;
-use vm_translator::{CodeWriter, CodeWriterClass, Command, ParserClass, ParserPublic};
+use vm_translator::code_writer::{CodeWriter, CodeWriterClass};
+use vm_translator::modules::Command;
+use vm_translator::parser::{ParserClass, ParserPublic};
 fn main() {
     let file = File::open("test.txt");
     let to_pass = BufReader::new(file.unwrap());
     let mut parser: ParserClass = ParserClass::new(to_pass);
     let mut write: CodeWriterClass = CodeWriterClass::new("output.txt".to_string());
-
     loop {
         let break_or = parser.has_more_commands();
         if !break_or {
