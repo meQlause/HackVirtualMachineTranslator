@@ -3,13 +3,18 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::ops::Add;
 
+/// Represents different types of commands that can be parsed from the input file.
 #[derive(Debug)]
 pub enum Command {
+    /// Represents a command that does not fall into any other category.
     None,
+    /// Represents an arithmetic operation command. ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"]
     Arithmetic(String),
+    /// Represents a function command.
     Function(String),
 }
 impl PartialEq for Command {
+    /// Compares two `Command` instances and returns true if they are equal in type.
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Command::Function(_), Command::Function(_)) => true,
@@ -20,37 +25,89 @@ impl PartialEq for Command {
     }
 }
 
+/// Represents different types of memory segments that can be parsed from the input file.
 #[derive(Clone, Debug)]
 pub enum Segment {
+    /// Represents a command that does not fall into any other category.
     None,
+    /// Represents an internal memory segment. ["local", "argument", "this", "that"]
     Internal(String),
-    Eksternal(String),
+    /// Represents an external memory segment. ["constant", "static", "temp", "pointer"]
+    External(String),
 }
 impl PartialEq for Segment {
+    /// Compares two `Segment` instances and returns true if they are equal in type.
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Segment::Internal(_), Segment::Internal(_)) => true,
-            (Segment::Eksternal(_), Segment::Eksternal(_)) => true,
+            (Segment::External(_), Segment::External(_)) => true,
             (Segment::None, Segment::None) => true,
             _ => false,
         }
     }
 }
 
+/// A public interface for parsing the input file and extracting commands.
 pub trait ParserPublic {
+    /// Creates a new instance of the parser.
+    ///
+    /// # Arguments
+    ///
+    /// * `input_file` - A `BufReader<File>` that reads the input file.
     fn new(input_file: BufReader<File>) -> Self;
+
+    /// Checks if there are more commands to be parsed from the input file.
+    ///
+    /// # Returns
+    ///
+    /// `true` if there are more commands, `false` otherwise.
     fn has_more_commands(&mut self) -> bool;
 }
+
+/// A private interface for parsing the input file and extracting commands and segments.
 trait ParserPrivate {
+    /// Advances to the next command in the input file.
     fn advance(&mut self);
+
+    /// Retrieves the type of the current command.
+    ///
+    /// # Returns
+    ///
+    /// A `Command` representing the type of the current command.
     fn command_type(&mut self) -> Command;
+
+    /// Retrieves the type of the current memory segment.
+    ///
+    /// # Returns
+    ///
+    /// A `Segment` representing the type of the current memory segment.
     fn segment_type(&self) -> Segment;
 }
 
+/// A public interface for writing VM commands to the output file.
 pub trait CodeWriter {
+    /// Creates a new instance of the code writer that writes to the specified output file.
+    ///
+    /// # Arguments
+    ///
+    /// * `output_file` - The path of the output file to write the VM commands to.
     fn new(output_file: String) -> Self;
+
+    /// Writes an arithmetic operation command to the output file.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - A reference to the parser that provides information about the command.
     fn write_arithmetic(&mut self, other: &ParserClass);
+
+    /// Writes a push or pop command to the output file.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - A reference to the parser that provides information about the command.
     fn write_push_pop(&mut self, other: &ParserClass);
+
+    /// Closes the output file, finalizing the writing process.
     fn close(&self);
 }
 
@@ -147,7 +204,7 @@ impl ParserPrivate for ParserClass {
             .into_iter()
             .map(|x| x.to_string())
             .collect();
-        let eksternal: Vec<String> = vec!["constant", "static", "temp", "pointer"]
+        let external: Vec<String> = vec!["constant", "static", "temp", "pointer"]
             .into_iter()
             .map(|x| x.to_string())
             .collect();
@@ -156,8 +213,8 @@ impl ParserPrivate for ParserClass {
                 a if internal.contains(&a.to_string()) => {
                     return Segment::Internal(a.to_string());
                 }
-                a if eksternal.contains(&a.to_string()) => {
-                    return Segment::Eksternal(a.to_string());
+                a if external.contains(&a.to_string()) => {
+                    return Segment::External(a.to_string());
                 }
                 _ => return Segment::None,
             };
@@ -251,7 +308,7 @@ impl CodeWriter for CodeWriterClass {
     fn write_push_pop(&mut self, other: &ParserClass) {
         if let Command::Function(command) = &other.command_type {
             match &other.segment_type {
-                Segment::Eksternal(a) => {
+                Segment::External(a) => {
                     let segment = a.to_string();
                     let key = command.clone().add(&"_").add(&segment);
                     let mut to_write = self
