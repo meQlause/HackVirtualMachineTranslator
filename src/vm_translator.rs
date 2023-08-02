@@ -6,14 +6,14 @@ pub mod modules {
         None,
         /// Represents an arithmetic operation command. ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"]
         Arithmetic(String),
-        /// Represents a function command.
-        Function(String),
+        /// Represents a PushPop command.
+        PushPop(String),
     }
     impl PartialEq for Command {
         /// Compares two `Command` instances and returns true if they are equal in type.
         fn eq(&self, other: &Self) -> bool {
             match (self, other) {
-                (Command::Function(_), Command::Function(_)) => true,
+                (Command::PushPop(_), Command::PushPop(_)) => true,
                 (Command::Arithmetic(_), Command::Arithmetic(_)) => true,
                 (Command::None, Command::None) => true,
                 _ => false,
@@ -97,10 +97,10 @@ pub mod parser {
         next_instruction: String,
 
         /// A vector containing supported VM arithmetic commands for parsing.
-        arithmetic_command: Vec<String>,
+        arithmetic_commands: Vec<String>,
 
-        /// A vector containing supported VM function commands for parsing.
-        function_command: Vec<String>,
+        /// A vector containing supported VM push and pop commands for parsing.
+        push_pop_commands: Vec<String>,
 
         /// The type of the current VM command.
         pub command_type: Command,
@@ -119,7 +119,7 @@ pub mod parser {
                     .into_iter()
                     .map(|x| x.to_string())
                     .collect();
-            let function: Vec<String> = vec!["push", "pop"]
+            let push_pop: Vec<String> = vec!["push", "pop"]
                 .into_iter()
                 .map(|x| x.to_string())
                 .collect();
@@ -127,8 +127,8 @@ pub mod parser {
                 file: input_file,
                 current_command: String::new(),
                 next_instruction: String::new(),
-                arithmetic_command: aritmetic,
-                function_command: function,
+                arithmetic_commands: aritmetic,
+                push_pop_commands: push_pop,
                 command_type: Command::None,
                 segment_type: Segment::None,
                 index: -1,
@@ -171,11 +171,11 @@ pub mod parser {
             let a: Vec<&str> = self.current_command.split(' ').collect();
             if !self.current_command.is_empty() {
                 match a[0].to_lowercase().trim() {
-                    b if self.function_command.contains(&b.to_string()) => {
+                    b if self.push_pop_commands.contains(&b.to_string()) => {
                         self.index = a[2].trim().parse::<i32>().unwrap();
-                        return Command::Function(b.to_string());
+                        return Command::PushPop(b.to_string());
                     }
-                    b if self.arithmetic_command.contains(&b.to_string()) => {
+                    b if self.arithmetic_commands.contains(&b.to_string()) => {
                         self.index = -1;
                         return Command::Arithmetic(b.to_string());
                     }
@@ -250,6 +250,9 @@ pub mod code_writer {
 
     /// Represents a code writer responsible for translating VM commands into assembly code and writing them to an output file.
     pub struct CodeWriterClass {
+        /// File output name
+        pub file_name: String,
+
         /// The output file where the translated assembly code will be written.
         pub file: File,
 
@@ -262,63 +265,48 @@ pub mod code_writer {
         /// A mapping of VM push/pop commands for external memory segments that hasn't mapped natively to memory  to their corresponding assembly code representations.
         push_pop_external_commands: HashMap<String, String>,
 
-        /// A counter used to generate unique labels for conditional jumps (used in branching commands).
+        /// A counter used to generate unique labels for conditional jumps (used in logic commands).
         if_count: i32,
     }
 
     impl CodeWriter for CodeWriterClass {
         fn new(output_file: String) -> Self {
+            #[rustfmt::skip]
             let arithmetic: HashMap<String, String> = vec![
-            ("add","// add\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M+D\n@SP\nM=M+1",),
-            ("sub","// sub\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M-D\n@SP\nM=M+1",),
-            ("neg", "// neg\n@S\nM=M-\nA=\nD=\nM=M-\n@S\nM=M+1"),
-            ("eq", "// eq@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nD=M-D\n@CON_TRUE_{i}\nD;JEQ\nM=0\n@CON_FINISH_{i}\n0;JMP\n(CON_TRUE_{i})\nM=-1\n(CON_FINISH_{i})\n@SP\nM=M+1"),
-            ("gt", "// gt\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nD=M-D\n@CON_TRUE_{i}\nD;JGT\nM=0\n@CON_FINISH_{i}\n0;JMP\n(CON_TRUE_{i})\nM=-1\n(CON_FINISH_{i})\n@SP\nM=M+1"),
-            ("lt", "// lt\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nD=M-D\n@CON_TRUE_{i}\nD;JLT\nM=0\n@CON_FINISH_{i}\n0;JMP\n(CON_TRUE_{i})\nM=-1\n(CON_FINISH_{i})\n@SP\nM=M+1"),
-            ("and", "// and\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M&D\n@SP\nM=M+1"),
-            ("or", "// or\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M|D\n@SP\nM=M+1"),
-            ("not", "// not\n@SP\nM=M-1\nA=M\nM=!M\n@SP\nM=M+1\n")
-        ].into_iter().map(|(x,y)| (x.to_string(),y.to_string())).collect();
+                ("add","// add\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M+D\n@SP\nM=M+1",),
+                ("sub","// sub\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M-D\n@SP\nM=M+1",),
+                ("neg", "// neg\n@SP\nM=M-1\nA=M\nD=M\nM=M-D\nM=M-D\n@SP\nM=M+1"),
+                ("eq", "// eq\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nD=M-D\n@CON_TRUE_{i}\nD;JEQ\n@SP\nA=M\nM=0\n@CON_FINISH_{i}\n0;JMP\n(CON_TRUE_{i})\n@SP\nA=M\nM=-1\n(CON_FINISH_{i})\n@SP\nM=M+1"),
+                ("gt", "// gt\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nD=M-D\n@CON_TRUE_{i}\nD;JGT\n@SP\nA=M\nM=0\n@CON_FINISH_{i}\n0;JMP\n(CON_TRUE_{i})\n@SP\nA=M\nM=-1\n(CON_FINISH_{i})\n@SP\nM=M+1"),
+                ("lt", "// lt\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nD=M-D\n@CON_TRUE_{i}\nD;JLT\n@SP\nA=M\nM=0\n@CON_FINISH_{i}\n0;JMP\n(CON_TRUE_{i})\n@SP\nA=M\nM=-1\n(CON_FINISH_{i})\n@SP\nM=M+1"),
+                ("and", "// and\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M&D\n@SP\nM=M+1"),
+                ("or", "// or\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M|D\n@SP\nM=M+1"),
+                ("not", "// not\n@SP\nM=M-1\nA=M\nM=!M\n@SP\nM=M+1\n")
+            ].into_iter().map(|(x,y)| (x.to_string(),y.to_string())).collect();
+
+            #[rustfmt::skip]
             let push_pop_internal :HashMap<String, String> = vec![
-            ("push", "// push {segment} {i} \n@{i}\nD=A\n@{segment}\nM=M+D\nA=M\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n@{i}\nD=A\n@{segment}\nM=M-D"),
-            ("pop", "// pop {segment} {i} \n@{i}\nD=A\n@{segment}\nM=M+D\n@SP\nM=M-1\nA=M\nD=M\n@{segment}\nA=M\nM=D\n@{i}\nD=A\n@{segment}\nM=M-D")
-        ].into_iter().map(|(x,y)| (x.to_string(),y.to_string())).collect();
+                ("push", "// push {segment} {i} \n@{i}\nD=A\n@{segment}\nM=M+D\nA=M\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n@{i}\nD=A\n@{segment}\nM=M-D"),
+                ("pop", "// pop {segment} {i} \n@{i}\nD=A\n@{segment}\nM=M+D\n@SP\nM=M-1\nA=M\nD=M\n@{segment}\nA=M\nM=D\n@{i}\nD=A\n@{segment}\nM=M-D")
+            ].into_iter().map(|(x,y)| (x.to_string(),y.to_string())).collect();
+
+            #[rustfmt::skip]
             let push_pop_ekstenal: HashMap<String, String> = vec![
-                (
-                    "push_constant",
-                    "// push constant {i}\n@{i}\nD=A\n@SP\nA=M\nM=D\n@SP\nM=M+1",
-                ),
-                (
-                    "push_static",
-                    "// push static {i}\n@aritmetic.{i}\n@{static}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",
-                ),
-                (
-                    "pop_static",
-                    "// pop static {i}\n@SP\nM=M-1\nA=M\nD=M\n@aritmetic.{i}\n@{static}\nM=D",
-                ),
-                (
-                    "pop_temp",
-                    "// pop temp {i}\n@SP\nM=M-1\nA=M\nD=M\n@{temp}\nM=D",
-                ),
-                (
-                    "push_temp",
-                    "// push temp {i}\n@{temp}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",
-                ),
-                (
-                    "pop_pointer",
-                    "// pop pointer {i}\n@SP\nM=M-1\nA=M\nD=M\n@{segment}\nM=D",
-                ),
-                (
-                    "push_pointer",
-                    "// push pointer {i}\n@{segment}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",
-                ),
+                ("push_constant", "// push constant {i}\n@{i}\nD=A\n@SP\nA=M\nM=D\n@SP\nM=M+1",),
+                ("push_static", "// push static {i}\n@aritmetic.{i}\n@{static}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",),
+                ("pop_static", "// pop static {i}\n@SP\nM=M-1\nA=M\nD=M\n@aritmetic.{i}\n@{static}\nM=D",),
+                ("pop_temp", "// pop temp {i}\n@SP\nM=M-1\nA=M\nD=M\n@{temp}\nM=D",),
+                ("push_temp", "// push temp {i}\n@{temp}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",),
+                ("pop_pointer", "// pop pointer {i}\n@SP\nM=M-1\nA=M\nD=M\n@{segment}\nM=D",),
+                ("push_pointer", "// push pointer {i}\n@{segment}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",),
             ]
             .into_iter()
             .map(|(x, y)| (x.to_string(), y.to_string()))
             .collect();
 
             CodeWriterClass {
-                file: File::create(output_file).unwrap(),
+                file_name: output_file.to_string(),
+                file: File::create(output_file.to_string()).unwrap(),
                 arithmetic_commands: arithmetic,
                 push_pop_internal_commands: push_pop_internal,
                 push_pop_external_commands: push_pop_ekstenal,
@@ -342,35 +330,34 @@ pub mod code_writer {
         }
 
         fn write_push_pop(&mut self, other: &ParserClass) {
-            if let Command::Function(command) = &other.command_type {
+            if let Command::PushPop(command) = &other.command_type {
                 match &other.segment_type {
-                    Segment::External(a) => {
-                        let segment = a.to_string();
+                    Segment::External(segment) => {
                         let key = command.clone().add(&"_").add(&segment);
                         let mut to_write = self
                             .push_pop_external_commands
                             .get(&key)
                             .unwrap()
                             .to_string();
-                        let mut segment: &str = "";
-                        let mut temp_: i32 = 5;
-                        let mut static_: i32 = 16;
-                        if a == "static" {
-                            static_ += other.index;
-                            segment = "vm_translator"
-                        } else if a == "temp" {
-                            temp_ += other.index;
-                            segment = "Temp"
-                        } else if a == "pointer" {
-                            segment = "THIS";
+                        let (mut segment, mut temp_address, mut static_address) =
+                            (String::new(), 5, 16);
+                        if segment == "static" {
+                            static_address += other.index;
+                            segment = self.file_name.to_string()
+                        } else if segment == "temp" {
+                            temp_address += other.index;
+                            segment = "Temp".to_string();
+                        } else if segment == "pointer" {
+                            segment = "THIS".to_string();
                             if other.index == 1 {
-                                segment = "THAT"
+                                segment = "THAT".to_string();
                             }
                         }
-                        to_write = to_write.replace("{i}", &other.index.clone().to_string());
-                        to_write = to_write.replace("{segment}", &segment);
-                        to_write = to_write.replace("{static}", &static_.to_string());
-                        to_write = to_write.replace("{temp}", &temp_.to_string());
+                        to_write = to_write
+                            .replace("{i}", &other.index.clone().to_string())
+                            .replace("{segment}", &segment)
+                            .replace("{static}", &static_address.to_string())
+                            .replace("{temp}", &temp_address.to_string());
                         writeln!(self.file, "{}", to_write).unwrap();
                     }
                     Segment::Internal(a) => {
@@ -379,18 +366,19 @@ pub mod code_writer {
                             .get(&command.to_string())
                             .unwrap()
                             .to_string();
-                        let mut segment: &str = "";
+                        let mut segment: String = String::new();
                         if a == "local" {
-                            segment = "LCL";
+                            segment = "LCL".to_string();
                         } else if a == "argument" {
-                            segment = "ARG"
+                            segment = "ARG".to_string()
                         } else if a == "this" {
-                            segment = "THIS"
+                            segment = "THIS".to_string()
                         } else if a == "that" {
-                            segment = "THAT"
+                            segment = "THAT".to_string()
                         }
-                        to_write = to_write.replace("{i}", &other.index.clone().to_string());
-                        to_write = to_write.replace("{segment}", &segment);
+                        to_write = to_write
+                            .replace("{i}", &other.index.clone().to_string())
+                            .replace("{segment}", &segment);
                         writeln!(self.file, "{}", to_write).unwrap();
                     }
                     _ => panic!("Segment {:?} is not segment.", &other.segment_type),
