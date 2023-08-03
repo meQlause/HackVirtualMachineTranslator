@@ -2,8 +2,6 @@ pub mod modules {
     /// Represents different types of commands that can be parsed from the input file.
     #[derive(Debug)]
     pub enum Command {
-        /// Represents a command that does not fall into any other category.
-        None,
         /// Represents an arithmetic operation command. ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"]
         Arithmetic(String),
         /// Represents a PushPop command.
@@ -18,7 +16,6 @@ pub mod modules {
                 (Command::PushPop(_), Command::PushPop(_)) => true,
                 (Command::Arithmetic(_), Command::Arithmetic(_)) => true,
                 (Command::Branch(_), Command::Branch(_)) => true,
-                (Command::None, Command::None) => true,
                 _ => false,
             }
         }
@@ -27,8 +24,6 @@ pub mod modules {
     /// Represents different types of memory segments that can be parsed from the input file.
     #[derive(Clone, Debug)]
     pub enum Segment {
-        /// Represents a command that does not fall into any other category.
-        None,
         /// Represents an internal memory segment. ["local", "argument", "this", "that"]
         Internal(String),
         /// Represents an external memory segment. ["constant", "static", "temp", "pointer"]
@@ -40,7 +35,6 @@ pub mod modules {
             match (self, other) {
                 (Segment::Internal(_), Segment::Internal(_)) => true,
                 (Segment::External(_), Segment::External(_)) => true,
-                (Segment::None, Segment::None) => true,
                 _ => false,
             }
         }
@@ -51,6 +45,7 @@ pub mod parser {
     use modules::{Command, Segment};
     use std::fs::File;
     use std::io::{BufRead, BufReader};
+    use std::ops::Add;
     /// A public interface for parsing the input file and extracting commands.
     pub trait ParserPublic {
         /// Creates a new instance of the parser.
@@ -78,14 +73,14 @@ pub mod parser {
         /// # Returns
         ///
         /// A `Command` representing the type of the current command.
-        fn command_type(&mut self) -> Command;
+        fn command_type(&mut self) -> Option<Command>;
 
         /// Retrieves the type of the current memory segment.
         ///
         /// # Returns
         ///
         /// A `Segment` representing the type of the current memory segment.
-        fn segment_type(&self) -> Segment;
+        fn segment_type(&self) -> Option<Segment>;
     }
 
     /// Represents a parser responsible for reading VM commands from an input file and extracting relevant information.
@@ -109,13 +104,13 @@ pub mod parser {
         branch_commands: Vec<String>,
 
         /// The type of the current VM command.
-        pub command_type: Command,
+        pub command_type: Option<Command>,
 
         /// The type of the memory segment associated with the current VM command (if applicable).
-        pub segment_type: Segment,
+        pub segment_type: Option<Segment>,
 
         /// The index or offset used in VM commands that require it (e.g., push/pop operations).
-        pub index: i32,
+        pub index: Option<i32>,
     }
 
     impl ParserPublic for ParserClass {
@@ -129,7 +124,7 @@ pub mod parser {
                 .into_iter()
                 .map(|x| x.to_string())
                 .collect();
-            let branch: Vec<String> = vec!["label", "if_goto", "goto"]
+            let branch: Vec<String> = vec!["label", "if-goto", "goto"]
                 .into_iter()
                 .map(|x| x.to_string())
                 .collect();
@@ -140,9 +135,9 @@ pub mod parser {
                 arithmetic_commands: aritmetic,
                 push_pop_commands: push_pop,
                 branch_commands: branch,
-                command_type: Command::None,
-                segment_type: Segment::None,
-                index: -1,
+                command_type: None,
+                segment_type: None,
+                index: None,
             }
         }
 
@@ -175,31 +170,37 @@ pub mod parser {
         fn advance(&mut self) {
             self.current_command = self.next_instruction.clone();
             self.command_type = self.command_type();
-            self.segment_type = self.segment_type()
+            if let Some(Command::PushPop(_)) = self.command_type {
+                self.segment_type = self.segment_type();
+            }
         }
 
-        fn command_type(&mut self) -> Command {
+        fn command_type(&mut self) -> Option<Command> {
             let a: Vec<&str> = self.current_command.split(' ').collect();
             if !self.current_command.is_empty() {
                 match a[0].to_lowercase().trim() {
-                    b if self.push_pop_commands.contains(&b.to_string()) => {
-                        self.index = a[2].trim().parse::<i32>().unwrap();
-                        return Command::PushPop(b.to_string());
+                    command if self.push_pop_commands.contains(&command.to_string()) => {
+                        self.index = Some(a[2].trim().parse::<i32>().unwrap());
+                        return Some(Command::PushPop(command.to_string()));
                     }
-                    b if self.arithmetic_commands.contains(&b.to_string()) => {
-                        self.index = -1;
-                        return Command::Arithmetic(b.to_string());
+                    command if self.arithmetic_commands.contains(&command.to_string()) => {
+                        self.index = None;
+                        return Some(Command::Arithmetic(command.to_string()));
+                    }
+                    command if self.branch_commands.contains(&command.to_string()) => {
+                        self.index = None;
+                        return Some(Command::Branch(command.to_string().add(" ").add(a[1])));
                     }
                     _ => {
-                        self.index = -1;
-                        return Command::None;
+                        self.index = None;
+                        return None;
                     }
                 };
             }
-            Command::None
+            None
         }
 
-        fn segment_type(&self) -> Segment {
+        fn segment_type(&self) -> Option<Segment> {
             let a: Vec<&str> = self.current_command.split(' ').collect();
             let internal: Vec<String> = vec!["local", "argument", "this", "that"]
                 .into_iter()
@@ -209,18 +210,15 @@ pub mod parser {
                 .into_iter()
                 .map(|x| x.to_string())
                 .collect();
-            if !self.current_command.is_empty() && a.len() > 1 {
-                match a[1].to_lowercase().trim() {
-                    a if internal.contains(&a.to_string()) => {
-                        return Segment::Internal(a.to_string());
-                    }
-                    a if external.contains(&a.to_string()) => {
-                        return Segment::External(a.to_string());
-                    }
-                    _ => return Segment::None,
-                };
-            }
-            Segment::None
+            match a[1].to_lowercase().trim() {
+                a if internal.contains(&a.to_string()) => {
+                    return Some(Segment::Internal(a.to_string()));
+                }
+                a if external.contains(&a.to_string()) => {
+                    return Some(Segment::External(a.to_string()));
+                }
+                _ => return None,
+            };
         }
     }
 }
@@ -257,6 +255,8 @@ pub mod code_writer {
         ///
         /// * `other` - A reference to the parser that provides information about the command.
         fn write_push_pop(&mut self, other: &ParserClass);
+
+        fn write_branch(&mut self, other: &ParserClass);
     }
 
     /// Represents a code writer responsible for translating VM commands into assembly code and writing them to an output file.
@@ -276,11 +276,13 @@ pub mod code_writer {
         /// A mapping of VM push/pop commands for external memory segments that hasn't mapped natively to memory  to their corresponding assembly code representations.
         push_pop_external_commands: HashMap<String, String>,
 
+        /// A mapping of VM label branching commands.
+        branch_commands: HashMap<String, String>,
+
         /// A counter used to generate unique labels for conditional jumps (used in logic commands).
         if_count: i32,
-
-        /// A counter used to generate unique labels for loop jumps (used in branching commands).
-        loop_count: i32,
+        //// A counter used to generate unique labels for loop jumps (used in branching commands).
+        // func_count: i32,
     }
 
     impl CodeWriter for CodeWriterClass {
@@ -319,10 +321,10 @@ pub mod code_writer {
             .collect();
 
             #[rustfmt::skip]
-            let label: HashMap<String, String> = vec![
-                ("label", "// label \n({label_name}{i})",),
-                ("goto", "// goto \n@{label_name}{i}\n0;JMP",),
-                ("if-goto", "// if-goto \n@SP\nM=M-1\nA=M\nD=M\n@{label_name}{i}\n@D;JGT",),
+            let branch: HashMap<String, String> = vec![
+                ("label", "// label \n({label_name})",),
+                ("goto", "// goto \n@{label_name}\n0;JMP",),
+                ("if-goto", "// if-goto \n@SP\nM=M-1\nA=M\nD=M\n@{label_name}\nD;JGT",),
             ]
             .into_iter()
             .map(|(x, y)| (x.to_string(), y.to_string()))
@@ -334,17 +336,18 @@ pub mod code_writer {
                 arithmetic_commands: arithmetic,
                 push_pop_internal_commands: push_pop_internal,
                 push_pop_external_commands: push_pop_ekstenal,
+                branch_commands: branch,
                 if_count: 0,
-                loop_count: 0,
+                // func_count: 0,
             }
         }
 
         fn write_arithmetic(&mut self, other: &ParserClass) {
             let if_condition: Vec<String> =
                 vec!["gt".to_string(), "lt".to_string(), "eq".to_string()];
-            if let Command::Arithmetic(x) = &other.command_type {
-                let mut to_write = self.arithmetic_commands.get(x).unwrap().to_string();
-                if if_condition.contains(&x) {
+            if let Some(Command::Arithmetic(command)) = &other.command_type {
+                let mut to_write = self.arithmetic_commands.get(command).unwrap().to_string();
+                if if_condition.contains(&command) {
                     to_write = to_write.replace("{i}", &self.if_count.clone().to_string());
                     self.if_count += 1;
                 };
@@ -355,9 +358,9 @@ pub mod code_writer {
         }
 
         fn write_push_pop(&mut self, other: &ParserClass) {
-            if let Command::PushPop(command) = &other.command_type {
+            if let Some(Command::PushPop(command)) = &other.command_type {
                 match &other.segment_type {
-                    Segment::External(segment) => {
+                    Some(Segment::External(segment)) => {
                         let key = command.clone().add(&"_").add(&segment);
                         let mut to_write = self
                             .push_pop_external_commands
@@ -367,25 +370,25 @@ pub mod code_writer {
                         let (mut segment, mut temp_address, mut static_address) =
                             (String::new(), 5, 16);
                         if segment == "static" {
-                            static_address += other.index;
+                            static_address += other.index.unwrap();
                             segment = self.file_name.to_string()
                         } else if segment == "temp" {
-                            temp_address += other.index;
+                            temp_address += other.index.unwrap();
                             segment = "Temp".to_string();
                         } else if segment == "pointer" {
                             segment = "THIS".to_string();
-                            if other.index == 1 {
+                            if other.index.unwrap() == 1 {
                                 segment = "THAT".to_string();
                             }
                         }
                         to_write = to_write
-                            .replace("{i}", &other.index.clone().to_string())
+                            .replace("{i}", &other.index.unwrap().clone().to_string())
                             .replace("{segment}", &segment)
                             .replace("{static}", &static_address.to_string())
                             .replace("{temp}", &temp_address.to_string());
                         writeln!(self.file, "{}", to_write).unwrap();
                     }
-                    Segment::Internal(a) => {
+                    Some(Segment::Internal(a)) => {
                         let mut to_write = self
                             .push_pop_internal_commands
                             .get(&command.to_string())
@@ -402,7 +405,7 @@ pub mod code_writer {
                             segment = "THAT".to_string()
                         }
                         to_write = to_write
-                            .replace("{i}", &other.index.clone().to_string())
+                            .replace("{i}", &other.index.unwrap().clone().to_string())
                             .replace("{segment}", &segment);
                         writeln!(self.file, "{}", to_write).unwrap();
                     }
@@ -411,6 +414,17 @@ pub mod code_writer {
             } else {
                 panic!("Command {:?} is not command function.", &other.command_type);
             };
+        }
+
+        fn write_branch(&mut self, other: &ParserClass) {
+            if let Some(Command::Branch(a)) = &other.command_type {
+                let command: Vec<&str> = a.split(' ').collect();
+                let mut to_write = self.branch_commands.get(command[0]).unwrap().to_string();
+                to_write = to_write.replace("{label_name}", command[1]);
+                writeln!(self.file, "{}", to_write).unwrap();
+            } else {
+                panic!("Command {:?} is not branch command", other.command_type);
+            }
         }
     }
 }
