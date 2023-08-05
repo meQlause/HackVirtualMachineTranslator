@@ -107,6 +107,7 @@ pub mod parser {
         /// A vector containing supported VM function commands for parsing.
         function_commands: Vec<String>,
 
+
         /// The type of the current VM command.
         pub command_type: Option<Command>,
 
@@ -119,11 +120,10 @@ pub mod parser {
 
     impl ParserPublic for ParserClass {
         fn new(input_file: BufReader<File>) -> Self {
-            let aritmetic: Vec<String> =
-                vec!["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"]
-                    .into_iter()
-                    .map(|x| x.to_string())
-                    .collect();
+            let aritmetic: Vec<String> = vec!["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"]
+                .into_iter()
+                .map(|x| x.to_string())
+                .collect();
             let push_pop: Vec<String> = vec!["push", "pop"]
                 .into_iter()
                 .map(|x| x.to_string())
@@ -136,6 +136,7 @@ pub mod parser {
                 .into_iter()
                 .map(|x| x.to_string())
                 .collect();
+          
             ParserClass {
                 file: input_file,
                 current_command: String::new(),
