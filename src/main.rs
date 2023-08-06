@@ -1,30 +1,11 @@
-mod vm_translator;
+mod prelude;
+mod utils;
+use crate::prelude::*;
 use std::env;
 use std::fs;
 use std::io::BufReader;
-use vm_translator::code_writer::{CodeWriter, CodeWriterClass};
-use vm_translator::modules::Command;
-use vm_translator::parser::{ParserClass, ParserPublic};
-
-/// Main function of the VM Translator program.
-///
-/// This function serves as the entry point of the VM Translator executable. It takes command-line arguments
-/// and performs the translation of VM code to assembly code for the target architecture. The program expects
-/// either a single VM file or a directory containing multiple VM files as input. The output file will contain
-/// the translated assembly code.
-///
-/// # Arguments
-///
-/// There are no direct arguments to the main function. Instead, the function reads command-line arguments
-/// using `env::args()` and processes them accordingly.
-///
-/// # Example
-///
-/// ```
-/// // Run the VM Translator with the following command-line arguments:
-/// // vmtranslator.exe MyFile.vm MyOutput.asm
-/// main();
-/// ```
+use utils::code_writer::{CodeWriter, CodeWriterClass};
+use utils::parser::{ParserClass, ParserPublic};
 fn main() {
     // Retrieve command-line arguments into a vector of strings called `path`.
     let path: Vec<String> = env::args().collect();
@@ -33,15 +14,17 @@ fn main() {
     if path.len() > 1 {
         // Create a mutable instance of `CodeWriterClass` with the output file path.
         let mut writer: CodeWriterClass = CodeWriterClass::new(path[2].to_string());
-
-        // Write the initialization code to the output file.
-        writer.write_init();
-
         // Check if the second argument ends with the `.vm` extension.
         if path[1][path[1].len() - 3..].to_lowercase() == ".vm" {
+            // Write the initialization code to the output file.
+            writer.write_init();
+
             // Process the single VM file and write its assembly code to the output file.
             write_file(&path[1], &mut writer);
         } else if let Ok(entries) = fs::read_dir(&path[1]) {
+            // Write the initialization code to the output file.
+            writer.write_init();
+
             // If the second argument is a directory, read its entries and process VM files.
             for entry in entries {
                 let file_path = entry.unwrap().path();
@@ -55,8 +38,6 @@ fn main() {
                     // Check if the file ends with the `.vm` extension.
                     if &file[file.len() - 3..] == ".vm" {
                         // Print a message indicating the current file is being executed.
-                        println!("{:?} executed", file);
-
                         // Process the current VM file and write its assembly code to the output file.
                         write_file(&file, &mut writer);
                     }
@@ -87,7 +68,6 @@ fn write_file(input: &str, writer: &mut CodeWriterClass) {
             // If there are no more commands, exit the loop.
             break;
         }
-
         // Match the type of the current VM command and call the appropriate method on `writer`.
         match parser.command_type {
             Some(Command::Arithmetic(_)) => {
