@@ -14,7 +14,7 @@ The VM Parser module is responsible for reading VM commands from an input file a
 
 To create an instance of the VM parser, follow these steps:
 
-```
+```rust
 fn main() {
     // Open the input file and create a BufReader
     let input_file = File::open("input.vm").expect("Failed to open input file");
@@ -29,7 +29,7 @@ fn main() {
 
 The VM Parser module provides the ParserPublic trait, which includes the methods new and has_more_commands. To use these methods, you can follow these examples:
 
-```
+```rust
     // Create an instance of the parser
     let mut parser = ParserClass::new(buf_reader);
 
@@ -47,7 +47,7 @@ Please note that the ParserClass is designed to be used in the context of the pr
 
 For example:
 
-```
+```rust
 fn main() {
     // Open the input file and create a BufReader
     let input_file = File::open("input.vm").expect("Failed to open input file");
@@ -110,7 +110,7 @@ The VM Code Writer module is responsible for translating VM commands into assemb
 
 To create an instance of the VM code writer, follow these steps:
 
-```
+```rust
 fn main() {
     // Specify the output file path where the translated assembly code will be written.
     let output_file = "output.asm".to_string();
@@ -124,7 +124,7 @@ fn main() {
 
 The VM Code Writer module provides the CodeWriter trait, which includes the methods new, write_arithmetic, and write_push_pop. To use these methods, you can follow these examples:
 
-```
+```rust
 fn main() {
     // Open the input file and create a BufReader
     let input_file = File::open("input.vm").expect("Failed to open input file");
@@ -172,7 +172,7 @@ Please ensure that you have the correct file path for the output ASM file. The a
 
 Here is My main code example :
 
-```
+```rust
 use std::env;
 use std::fs;
 use std::io::BufReader;
