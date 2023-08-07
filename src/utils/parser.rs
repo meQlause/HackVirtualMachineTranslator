@@ -47,16 +47,16 @@ pub struct ParserClass {
     next_instruction: String,
 
     /// List of Commands supported VM arithmetic commands for parsing.
-    arithmetic_commands: CommandList<String>,
+    arithmetic_commands: List<String>,
 
     /// List of Commands supported VM push and pop commands for parsing.
-    push_pop_commands: CommandList<String>,
+    push_pop_commands: List<String>,
 
     /// List of Commands supported VM branch commands for parsing.
-    branch_commands: CommandList<String>,
+    branch_commands: List<String>,
 
     /// List of Commands supported VM function commands for parsing.
-    function_commands: CommandList<String>,
+    function_commands: List<String>,
 
     /// The current VM command being processed.
     pub current_command: String,
@@ -83,10 +83,10 @@ impl ParserPublic for ParserClass {
     /// A new instance of the ParserClass.
     fn new(input_file: BufReader<File>) -> Self {
         #[rustfmt::skip]
-        let aritmetic: CommandList<String> = CommandList::new(vec!["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not",]);
-        let push_pop: CommandList<String> = CommandList::new(vec!["push", "pop"]);
-        let branch: CommandList<String> = CommandList::new(vec!["label", "if-goto", "goto"]);
-        let function: CommandList<String> = CommandList::new(vec!["function", "call", "return"]);
+        let aritmetic: List<String> = List::new(vec!["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not",]);
+        let push_pop: List<String> = List::new(vec!["push", "pop"]);
+        let branch: List<String> = List::new(vec!["label", "if-goto", "goto"]);
+        let function: List<String> = List::new(vec!["function", "call", "return"]);
 
         ParserClass {
             file: input_file,
@@ -219,21 +219,15 @@ impl ParserPrivate for ParserClass {
         let a: Vec<&str> = self.current_command.split(' ').collect();
 
         // Define vectors of recognized internal and external segments.
-        let internal: Vec<String> = vec!["local", "argument", "this", "that"]
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect();
-        let external: Vec<String> = vec!["constant", "static", "temp", "pointer"]
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect();
+        let internal: List<String> = List::new(vec!["local", "argument", "this", "that"]);
+        let external: List<String> = List::new(vec!["constant", "static", "temp", "pointer"]);
 
         match a[1].to_lowercase().trim() {
-            segment if internal.contains(&segment.to_string()) => {
+            segment if internal.is_exist(&segment.to_string()) => {
                 // For internal segments, return the corresponding variant of the Segment enum.
                 return Some(Segment::Internal(segment.to_string()));
             }
-            segment if external.contains(&segment.to_string()) => {
+            segment if external.is_exist(&segment.to_string()) => {
                 // For external segments, return the corresponding variant of the Segment enum.
                 return Some(Segment::External(segment.to_string()));
             }

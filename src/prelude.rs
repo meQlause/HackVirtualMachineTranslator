@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 #[derive(Debug)]
 pub enum Command {
@@ -45,17 +45,37 @@ impl PartialEq for Segment {
 
 // General data type for strong command
 #[derive(Debug)]
-pub struct CommandList<T>(pub Vec<T>);
+pub struct List<T>(pub Vec<T>);
 
-impl<T> CommandList<T>
+impl<T> List<T>
 where
     T: Display + Into<String> + PartialEq,
 {
-    pub fn new(list: Vec<T>) -> CommandList<String> {
+    pub fn new(list: Vec<T>) -> List<String> {
         let t = list.into_iter().map(|x| x.to_string()).collect();
-        CommandList(t)
+        List(t)
     }
     pub fn is_exist(&self, key: &T) -> bool {
         self.0.contains(key)
+    }
+}
+
+// General data type for strong command
+#[derive(Debug)]
+pub struct CommandList<T>(pub HashMap<T, T>);
+
+impl<T> CommandList<T>
+where
+    T: Display + Into<String> + PartialEq + Eq + Hash,
+{
+    pub fn new(list: Vec<(T, T)>) -> CommandList<String> {
+        let t = list
+            .into_iter()
+            .map(|(x, y)| (x.to_string(), y.to_string()))
+            .collect();
+        CommandList(t)
+    }
+    pub fn get(&self, key: &T) -> &T {
+        self.0.get(key).unwrap()
     }
 }

@@ -1,6 +1,5 @@
 use super::parser::*;
 use crate::prelude::*;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::ops::Add;
@@ -116,19 +115,19 @@ pub struct CodeWriterClass {
     pub file: File,
 
     /// A mapping of VM arithmetic commands to their corresponding assembly code representations.
-    arithmetic_commands: HashMap<String, String>,
+    arithmetic_commands: CommandList<String>,
 
     /// A mapping of VM push/pop commands for internal memory segments that has mapped natively to memory to their corresponding assembly code representations.
-    push_pop_internal_commands: HashMap<String, String>,
+    push_pop_internal_commands: CommandList<String>,
 
     /// A mapping of VM push/pop commands for external memory segments that hasn't mapped natively to memory  to their corresponding assembly code representations.
-    push_pop_external_commands: HashMap<String, String>,
+    push_pop_external_commands: CommandList<String>,
 
     /// A mapping of VM label branching commands.
-    branch_commands: HashMap<String, String>,
+    branch_commands: CommandList<String>,
 
     /// A mapping of VM label function commands.
-    function_commands: HashMap<String, String>,
+    function_commands: CommandList<String>,
 
     /// A counter used to generate unique labels for conditional jumps (used in logic commands).
     logical_count: i32,
@@ -145,7 +144,7 @@ impl CodeWriter for CodeWriterClass {
         // Initialization of various command maps and other internal state.
 
         #[rustfmt::skip]
-        let arithmetic: HashMap<String, String> = vec![
+        let arithmetic: CommandList<String> = CommandList::new(vec![
             ("add","// add\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M+D\n@SP\nM=M+1",),
             ("sub","// sub\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M-D\n@SP\nM=M+1",),
             ("neg", "// neg\n@SP\nM=M-1\nA=M\nD=M\nM=M-D\nM=M-D\n@SP\nM=M+1"),
@@ -155,16 +154,16 @@ impl CodeWriter for CodeWriterClass {
             ("and", "// and\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M&D\n@SP\nM=M+1"),
             ("or", "// or\n@SP\nM=M-1\nA=M\nD=M\n@SP\nM=M-1\nA=M\nM=M|D\n@SP\nM=M+1"),
             ("not", "// not\n@SP\nM=M-1\nA=M\nM=!M\n@SP\nM=M+1\n")
-        ].into_iter().map(|(x,y)| (x.to_string(),y.to_string())).collect();
+            ]);
 
         #[rustfmt::skip]
-        let push_pop_internal :HashMap<String, String> = vec![
+        let push_pop_internal :CommandList<String> = CommandList::new(vec![
             ("push", "// push {segment} {i} \n@{i}\nD=A\n@{segment}\nM=M+D\nA=M\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n@{i}\nD=A\n@{segment}\nM=M-D"),
             ("pop", "// pop {segment} {i} \n@{i}\nD=A\n@{segment}\nM=M+D\n@SP\nM=M-1\nA=M\nD=M\n@{segment}\nA=M\nM=D\n@{i}\nD=A\n@{segment}\nM=M-D")
-        ].into_iter().map(|(x,y)| (x.to_string(),y.to_string())).collect();
+        ]);
 
         #[rustfmt::skip]
-        let push_pop_ekstenal: HashMap<String, String> = vec![
+        let push_pop_ekstenal: CommandList<String> = CommandList::new(vec![
             ("push_constant", "// push constant {i}\n@{i}\nD=A\n@SP\nA=M\nM=D\n@SP\nM=M+1",),
             ("push_static", "// push static {i}\n@{file_name}.{i}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",),
             ("pop_static", "// pop static {i}\n@SP\nM=M-1\nA=M\nD=M\n@{file_name}.{i}\nM=D",),
@@ -172,30 +171,21 @@ impl CodeWriter for CodeWriterClass {
             ("push_temp", "// push temp {i}\n@{temp}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",),
             ("pop_pointer", "// pop pointer {i}\n@SP\nM=M-1\nA=M\nD=M\n@{segment}\nM=D",),
             ("push_pointer", "// push pointer {i}\n@{segment}\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1",),
-        ]
-        .into_iter()
-        .map(|(x, y)| (x.to_string(), y.to_string()))
-        .collect();
+        ]);
 
         #[rustfmt::skip]
-        let branch: HashMap<String, String> = vec![
+        let branch: CommandList<String> = CommandList::new(vec![
             ("label", "// label \n({label_name})",),
             ("goto", "// goto \n@{label_name}\n0;JMP",),
             ("if-goto", "// if-goto \n@SP\nM=M-1\nA=M\nD=M\n@{label_name}\nD;JNE",),
-        ]
-        .into_iter()
-        .map(|(x, y)| (x.to_string(), y.to_string()))
-        .collect();
+        ]);
 
         #[rustfmt::skip]
-        let function: HashMap<String, String> = vec![
+        let function:CommandList<String> = CommandList::new(vec![
             ("function", "// function {function_name} {Vars}\n({function_name})",),
             ("call", "// call {function_name} {Args}\n@{function_name}.ret.{i}\nD=A\n@SP\nA=M\nM=D\n@SP\nM=M+1\n@LCL\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n@ARG\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n@THIS\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n@THAT\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\nD=M\n@5\nD=D-A\n@{Args}\nD=D-A\n@ARG\nM=D\n@SP\nD=M\n@LCL\nM=D\n@{function_name}\n0;JMP\n({function_name}.ret.{i})",),
             ("return", "// return\n@LCL\nD=M\n@13\nM=D\nD=M\n@5\nD=D-A\nA=D\nD=M\n@14\nM=D\n@SP\nM=M-1\nA=M\nD=M\n@ARG\nA=M\nM=D\nD=A\n@SP\nM=D\nM=M+1\n@13\nD=M-1\nA=D\nD=M\n@THAT\nM=D\n@13\nA=M\nD=A\n@2\nD=D-A\nA=D\nD=M\n@THIS\nM=D\n@13\nA=M\nD=A\n@3\nD=D-A\nA=D\nD=M\n@ARG\nM=D\n@13\nA=M\nD=A\n@4\nD=D-A\nA=D\nD=M\n@LCL\nM=D\n@14\nA=M\n0;JMP",),
-        ]
-        .into_iter()
-        .map(|(x, y)| (x.to_string(), y.to_string()))
-        .collect();
+        ]);
 
         // Create a new instance of CodeWriterClass with the initialized data.
         CodeWriterClass {
@@ -218,7 +208,7 @@ impl CodeWriter for CodeWriterClass {
         // Check if `other` contains an arithmetic command
         if let Some(Command::Arithmetic(command)) = &other.command_type {
             // Retrieve the corresponding assembly code for the arithmetic command
-            let mut to_write = self.arithmetic_commands.get(command).unwrap().to_string();
+            let mut to_write = self.arithmetic_commands.get(command).to_string();
 
             // If the command requires an additional integer argument, replace "{i}" in the assembly code with a unique identifier
             if if_condition.contains(&command) {
@@ -251,11 +241,7 @@ impl CodeWriter for CodeWriterClass {
                 let key = command.clone().add(&"_").add(&segment);
 
                 // Get the corresponding assembly code for the push or pop command.
-                let mut to_write = self
-                    .push_pop_external_commands
-                    .get(&key)
-                    .unwrap()
-                    .to_string();
+                let mut to_write = self.push_pop_external_commands.get(&key).to_string();
 
                 // Initialize variables to be used for segment-specific processing.
                 let (mut segment_to_add, mut temp_address) = (String::new(), 5);
@@ -290,7 +276,6 @@ impl CodeWriter for CodeWriterClass {
                 let mut to_write = self
                     .push_pop_internal_commands
                     .get(&command.to_string())
-                    .unwrap()
                     .to_string();
 
                 // Initialize a variable to be used for segment-specific processing.
@@ -335,7 +320,7 @@ impl CodeWriter for CodeWriterClass {
         let a: Vec<&str> = other.current_command.split(' ').collect();
 
         // Get the corresponding assembly code for the branch command from the map.
-        let mut to_write = self.branch_commands.get(command).unwrap().to_string();
+        let mut to_write = self.branch_commands.get(command).to_string();
 
         // Replace the placeholder "{label_name}" in the assembly code with the actual label name.
         to_write = to_write.replace("{label_name}", a[1]);
@@ -358,7 +343,7 @@ impl CodeWriter for CodeWriterClass {
         let a: Vec<&str> = other.current_command.split(' ').collect();
 
         // Get the corresponding assembly code for the function command from the map.
-        let mut to_write = self.function_commands.get(command).unwrap().to_string();
+        let mut to_write = self.function_commands.get(command).to_string();
 
         // Process the command if it contains additional arguments (function name and argument count).
         if a.len() > 1 {
