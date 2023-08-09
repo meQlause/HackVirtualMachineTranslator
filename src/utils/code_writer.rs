@@ -129,11 +129,7 @@ pub struct CodeWriterClass {
     /// A mapping of VM label function commands.
     function_commands: CommandList<String>,
 
-    /// A counter used to generate unique labels for conditional jumps (used in logic commands).
-    logical_count: i32,
-
-    /// A counter used to generate unique labels for function jumps (used in logic commands).
-    function_count: i32,
+    state: State,
 }
 
 /// CodeWriter is an implementation for the CodeWriterClass, responsible for generating
@@ -196,14 +192,14 @@ impl CodeWriter for CodeWriterClass {
             push_pop_external_commands: push_pop_ekstenal,
             branch_commands: branch,
             function_commands: function,
-            logical_count: 0,
-            function_count: 1,
+            state: State::new(),
         }
     }
 
     fn write_arithmetic(&mut self, other: &ParserClass) {
         // List of supported arithmetic commands that require an additional integer argument
-        let if_condition: Vec<String> = vec!["gt".to_string(), "lt".to_string(), "eq".to_string()];
+        let if_condition: List<String> =
+            List::new(vec!["gt".to_string(), "lt".to_string(), "eq".to_string()]);
 
         // Check if `other` contains an arithmetic command
         if let Some(Command::Arithmetic(command)) = &other.command_type {
@@ -211,9 +207,9 @@ impl CodeWriter for CodeWriterClass {
             let mut to_write = self.arithmetic_commands.get(command).to_string();
 
             // If the command requires an additional integer argument, replace "{i}" in the assembly code with a unique identifier
-            if if_condition.contains(&command) {
-                to_write = to_write.replace("{i}", &self.logical_count.clone().to_string());
-                self.logical_count += 1; // Increment the unique identifier for the next command
+            if if_condition.is_exist(&command) {
+                to_write = to_write.replace("{i}", &self.state.get_logical());
+                self.state.inc_logical(); // Increment the unique identifier for the next command
             }
 
             // Write the resulting assembly code to the output file
@@ -353,10 +349,10 @@ impl CodeWriter for CodeWriterClass {
                 .replace("{file_name}", &self.file_name[..self.file_name.len() - 4])
                 .replace("{Args}", a[2])
                 .replace("{Vars}", a[2])
-                .replace("{i}", &self.function_count.to_string());
+                .replace("{i}", &self.state.get_function());
 
             // Increment the function count for subsequent function declarations.
-            self.function_count += 1;
+            self.state.inc_function();
         }
 
         // Write the translated assembly code to the output file.

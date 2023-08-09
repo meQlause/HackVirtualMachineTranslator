@@ -79,3 +79,28 @@ where
         self.0.get(key).unwrap()
     }
 }
+
+#[derive(Debug)]
+pub struct State(pub Vec<i32>);
+
+impl State {
+    pub fn new() -> State {
+        State(vec![0, 1])
+    }
+
+    pub fn get_logical(&self) -> String {
+        self.0[0].to_string()
+    }
+
+    pub fn get_function(&self) -> String {
+        self.0[1].to_string()
+    }
+
+    pub fn inc_logical(&mut self) {
+        self.0[0] += 1;
+    }
+
+    pub fn inc_function(&mut self) {
+        self.0[1] += 1;
+    }
+}
