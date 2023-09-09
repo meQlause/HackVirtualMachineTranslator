@@ -1,4 +1,5 @@
 use std::{collections::HashMap, fmt::Display, hash::Hash};
+use std::default::Default;
 
 #[derive(Debug)]
 pub enum Command {
@@ -14,13 +15,12 @@ pub enum Command {
 impl PartialEq for Command {
     /// Compares two `Command` instances and returns true if they are equal in type.
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Command::PushPop(_), Command::PushPop(_)) => true,
-            (Command::Arithmetic(_), Command::Arithmetic(_)) => true,
-            (Command::Branch(_), Command::Branch(_)) => true,
-            (Command::Function(_), Command::Function(_)) => true,
-            _ => false,
-        }
+        matches! ((self, other),
+            (Command::PushPop(_), Command::PushPop(_)) |
+            (Command::Arithmetic(_), Command::Arithmetic(_)) |
+            (Command::Branch(_), Command::Branch(_)) |
+            (Command::Function(_), Command::Function(_)) 
+        )
     }
 }
 
@@ -35,11 +35,10 @@ pub enum Segment {
 impl PartialEq for Segment {
     /// Compares two `Segment` instances and returns true if they are equal in type.
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Segment::Internal(_), Segment::Internal(_)) => true,
-            (Segment::External(_), Segment::External(_)) => true,
-            _ => false,
-        }
+        matches!((self, other), 
+            (Segment::Internal(_), Segment::Internal(_)) | 
+            (Segment::External(_), Segment::External(_))
+        )
     }
 }
 
@@ -83,11 +82,13 @@ where
 #[derive(Debug)]
 pub struct State(pub Vec<i32>);
 
-impl State {
-    pub fn new() -> State {
+impl Default for State {
+    fn default() -> Self {
         State(vec![0, 1])
     }
+}
 
+impl State {
     pub fn get_logical(&self) -> String {
         self.0[0].to_string()
     }

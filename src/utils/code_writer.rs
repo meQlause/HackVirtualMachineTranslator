@@ -186,13 +186,13 @@ impl CodeWriter for CodeWriterClass {
         // Create a new instance of CodeWriterClass with the initialized data.
         CodeWriterClass {
             file_name: output_file.to_string(),
-            file: File::create(output_file.to_string()).unwrap(),
+            file: File::create(output_file).unwrap(),
             arithmetic_commands: arithmetic,
             push_pop_internal_commands: push_pop_internal,
             push_pop_external_commands: push_pop_ekstenal,
             branch_commands: branch,
             function_commands: function,
-            state: State::new(),
+            state: State::default(),
         }
     }
 
@@ -207,13 +207,13 @@ impl CodeWriter for CodeWriterClass {
             let mut to_write = self.arithmetic_commands.get(command).to_string();
 
             // If the command requires an additional integer argument, replace "{i}" in the assembly code with a unique identifier
-            if if_condition.is_exist(&command) {
+            if if_condition.is_exist(command) {
                 to_write = to_write.replace("{i}", &self.state.get_logical());
                 self.state.inc_logical(); // Increment the unique identifier for the next command
             }
 
             // Write the resulting assembly code to the output file
-            writeln!(self.file, "{}", to_write).unwrap();
+            writeln!(self.file, "{to_write}").unwrap();
         } else {
             // Panic if `other` does not contain an arithmetic command
             panic!(
@@ -232,9 +232,9 @@ impl CodeWriter for CodeWriterClass {
         // Match the segment type (external or internal).
         match &other.segment_type {
             // For external segments (static, temp, pointer), generate the assembly code.
-            Some(Segment::External(segment)) => {
+            Some(Segment::External(_segment)) => {
                 // Create a key to look up the corresponding assembly code in the map.
-                let key = command.clone().add(&"_").add(&segment);
+                let key = command.clone().add("_").add(_segment);
 
                 // Get the corresponding assembly code for the push or pop command.
                 let mut to_write = self.push_pop_external_commands.get(&key).to_string();
@@ -243,16 +243,17 @@ impl CodeWriter for CodeWriterClass {
                 let (mut segment_to_add, mut temp_address) = (String::new(), 5);
 
                 // Process the specific segments (static, temp, pointer).
-                if segment == "static" {
+                if _segment == "static" {
                     segment_to_add = self.file_name.to_string();
-                } else if segment == "temp" {
-                    temp_address += other.index.unwrap();
+                } else if _segment == "temp" {
                     segment_to_add = "Temp".to_string();
-                } else if segment == "pointer" {
-                    segment_to_add = "THIS".to_string();
+                    temp_address += other.index.unwrap();
+                } else if _segment == "pointer" {
                     if other.index.unwrap() == 1 {
                         segment_to_add = "THAT".to_string();
-                    }
+                    } else {
+                        segment_to_add = "THIS".to_string();
+                    } 
                 }
 
                 // Replace placeholders in the assembly code with the appropriate values.
@@ -263,7 +264,7 @@ impl CodeWriter for CodeWriterClass {
                     .replace("{file_name}", &self.file_name[..self.file_name.len() - 3]);
 
                 // Write the translated assembly code to the output file.
-                writeln!(self.file, "{}", to_write).unwrap();
+                writeln!(self.file, "{to_write}").unwrap();
             }
 
             // For internal segments (local, argument, this, that), generate the assembly code.
@@ -294,7 +295,7 @@ impl CodeWriter for CodeWriterClass {
                     .replace("{segment}", &segment_to_add);
 
                 // Write the translated assembly code to the output file.
-                writeln!(self.file, "{}", to_write).unwrap();
+                writeln!(self.file, "{to_write}").unwrap();
             }
 
             // If the segment type is not recognized, panic with an error message.
@@ -313,16 +314,16 @@ impl CodeWriter for CodeWriterClass {
         };
 
         // Split the current command into parts, assuming it is space-separated.
-        let a: Vec<&str> = other.current_command.split(' ').collect();
+        let label: Vec<&str> = other.current_command.split(' ').collect();
 
         // Get the corresponding assembly code for the branch command from the map.
         let mut to_write = self.branch_commands.get(command).to_string();
 
         // Replace the placeholder "{label_name}" in the assembly code with the actual label name.
-        to_write = to_write.replace("{label_name}", a[1]);
+        to_write = to_write.replace("{label_name}", label[1]);
 
         // Write the translated assembly code to the output file.
-        writeln!(self.file, "{}", to_write).unwrap();
+        writeln!(self.file, "{to_write}").unwrap();
     }
 
     fn write_function(&mut self, other: &ParserClass) {
@@ -336,19 +337,19 @@ impl CodeWriter for CodeWriterClass {
         };
 
         // Split the current command into parts, assuming it is space-separated.
-        let a: Vec<&str> = other.current_command.split(' ').collect();
+        let _command: Vec<&str> = other.current_command.split(' ').collect();
 
         // Get the corresponding assembly code for the function command from the map.
         let mut to_write = self.function_commands.get(command).to_string();
 
         // Process the command if it contains additional arguments (function name and argument count).
-        if a.len() > 1 {
+        if _command.len() > 1 {
             // Replace placeholders in the assembly code with the actual function and file names, Args, Vars, and count.
             to_write = to_write
-                .replace("{function_name}", a[1])
+                .replace("{function_name}", _command[1])
                 .replace("{file_name}", &self.file_name[..self.file_name.len() - 4])
-                .replace("{Args}", a[2])
-                .replace("{Vars}", a[2])
+                .replace("{Args}", _command[2])
+                .replace("{Vars}", _command[2])
                 .replace("{i}", &self.state.get_function());
 
             // Increment the function count for subsequent function declarations.
@@ -356,17 +357,16 @@ impl CodeWriter for CodeWriterClass {
         }
 
         // Write the translated assembly code to the output file.
-        writeln!(self.file, "{}", to_write).unwrap();
+        writeln!(self.file, "{to_write}").unwrap();
 
         // If the command is a "function" command, add local variables to the function's stack frame.
-        if a[0] == "function" {
-            let vars: usize = a[2].clone().parse::<usize>().unwrap();
+        if _command[0] == "function" {
+            let vars: usize = _command[2].parse::<usize>().unwrap();
             // Iterate over the number of local variables and initialize them to 0 on the stack frame.
             for i in 0..vars {
                 writeln!(
                     self.file,
-                    "// Add local var(s)\n@{}\nD=A\n@LCL\nA=M+D\nM=0\n@SP\nM=M+1",
-                    i
+                    "// Add local var(s)\n@{i}\nD=A\n@LCL\nA=M+D\nM=0\n@SP\nM=M+1"
                 )
                 .unwrap();
             }
